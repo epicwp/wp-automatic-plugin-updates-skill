@@ -1,0 +1,6 @@
+.DS_Store
+*.log
+
+# Never commit site configuration, even if someone drops it in this folder
+sites.yaml
+.wp-plugin-updates/
