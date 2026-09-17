@@ -71,9 +71,8 @@ coverage gap and mention it in the report, not as a dropped probe.
 errors go to `wp-content/debug.log` and the host's error log holds only
 nginx lines — a P2 on the host log then sees nothing while the site fatals.
 Check `wp config get WP_DEBUG_LOG` at setup and at the start of a run; when
-it is on, `logpath` must be `debug.log` (or read both). For `debug.log`
-lines use `.*` instead of `[^"]*` in the signature grep: the message itself
-may contain quotes (`Attempt to read property "x" on null`).
+it is on, `logpath` must be `debug.log` (or read both). The signature grep
+above works for both: the non-greedy match keeps quotes inside messages.
 
 **Subtract your own noise.** P4 runs WordPress in admin context under
 WP-CLI and logs its known fatal and warnings into the same log; host cache
@@ -97,11 +96,18 @@ After the update, extract signatures of everything new since that line:
 
 ```bash
 ssh <alias> "tail -n +<BASELINE_LINES> <logpath> \
-  | grep -aoE 'PHP (Fatal error|Parse error|Warning|Notice|Deprecated):[^\"]*' \
-  | sed -E 's/(on line [0-9]+).*/\1/; s/\" while reading.*//; s/, client:.*//; s/, referer:.*//' \
+  | grep -aoP 'PHP (Fatal error|Parse error|Warning|Notice|Deprecated):.*?on line [0-9]+' \
   | sed -E 's/PHP message: //g' \
   | sort -u"
 ```
+
+The non-greedy `.*?on line N` keeps the whole message. Do not stop at a
+double quote (`[^"]*`): many messages contain one (`Undefined array key
+"width"`, `Attempt to read property "ID"`) and a signature cut there
+collapses different warnings into one — a new one then hides behind an old
+one. Observed exactly that on a core update, where a pre-existing
+`media.php` warning and a possible new one were indistinguishable until the
+raw lines were read.
 
 **Normalise strictly or the probe is worthless.** One nginx line often holds
 several PHP messages, and only the last one carries the nginx tail (`client:`,
