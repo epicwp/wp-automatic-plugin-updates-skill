@@ -75,6 +75,43 @@ mandatory `<?php` opening tag (eval-file does an include).
   check you're not measuring a cached page (P1's MISS/BYPASS check) and that
   caches were flushed before measuring.
 
+## Core update issues
+
+- `wp core check-update` shows nothing while wordpress.org has a newer
+  release — WordPress filters offers by the site's PHP version. Compare
+  `https://api.wordpress.org/core/version-check/1.7/?php=<site php>` with
+  the same URL without `php=`: if the release only appears without the
+  filter, raising PHP is a hosting action, not a technical one. Also clear
+  `wp transient delete update_core` first — the check is cached 12 hours.
+- `Error: Update failed: Could not copy file.` / `Could not create
+  directory.` — permissions or disk. Run `wp core verify-checksums` before
+  deciding whether anything partial landed.
+- Localized package 404 (`wordpress-<ver>-<locale>.zip`) right after a
+  release — language packages trail `en_US` by hours. Wait; do not fall back
+  to `en_US`, that swaps the package language of the install.
+- `Warning: File doesn't verify against checksum` **before** the core unit —
+  a modified core file; stop and ask (update-run.md, core preconditions).
+  `File should not exist` is leftovers, not a modification.
+- `wp core update-db` prints `Success: WordPress database already at latest
+  revision` — normal after a minor release; after a feature release compare
+  P9's two `db_version` fields anyway.
+
+## Seen in the field
+
+- **All pages 500 for ~30 s right after an update, and again after the
+  rollback** — the opcache window (update-run.md 0.2b). `debug.log` shows
+  `Class "..." not found` in the updated plugin's main file. Wait the settle
+  time, measure again; the plugin is only at fault if the 500 outlives the
+  window.
+- `limiting requests, excess: ... by zone "purgeAll"` in nginx's error log
+  after `wp kinsta cache purge --all` — Kinsta rate-limits its own purge
+  endpoint; the run causes these lines, they are not a site error.
+- `wp plugin update <slug> --version=X` downloads the *unversioned* zip when
+  X is the current latest (`<slug>.zip` instead of `<slug>.X.zip`). P3 still
+  has to confirm the installed version equals X.
+- A plugin that silently deactivates on update — directory name differs from
+  the wp.org slug (update-run.md, step 2b). Manual update plus re-activation.
+
 ## Workdir problems
 
 - Cannot create a directory outside the webroot — see setup.md §6: without

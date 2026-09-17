@@ -1,6 +1,7 @@
 # WP Plugin Updates — an agent skill
 
-Safely update WordPress plugins from the AI coding agent you already use —
+Safely update WordPress plugins and WordPress core from the AI coding agent
+you already use —
 Claude Code, Cowork, Cursor, Codex, or anything that supports agent skills.
 
 No SaaS. No plugin to install on your site. No account. Just a skill that
@@ -71,6 +72,10 @@ Tools that update your plugins save you clicks. This saves you the thinking.
 5. **Update** — one plugin at a time: snapshot, update (pinned to the exact
    researched version where possible), cache flush, re-measure, compare.
    Hard failure → automatic file rollback, re-verified against the baseline.
+   WordPress core, when a release is offered, is the last unit of the run
+   under the same discipline: snapshot of the core files, pinned download
+   from wordpress.org in the site's language, explicit database upgrade,
+   re-measure, file rollback on hard failure.
 6. **Report** — what changed, what was skipped and why, what a human should
    still check. Written in neutral professional language you can forward to
    a client as-is.
@@ -148,6 +153,8 @@ The skill operates under hard rules the agent may never break, including:
 - **The database is never restored automatically.** Files yes; a DB restore
   destroys orders that arrived in the meantime and always requires a human.
 - Plugins that run **database migrations are never auto-updated** — waitlisted.
+  The only migration the skill ever runs is WordPress core's own database
+  upgrade, inside the core unit, after a fresh dump.
 - Snapshots are kept **at least 30 days** — premium plugins often can't be
   re-downloaded.
 - **When in doubt, it stops and asks.** A skipped plugin costs nothing;
@@ -160,7 +167,8 @@ agent's model provider, under your existing agreement with them.
 
 ## What it deliberately does not do
 
-- **Theme and WordPress core updates** — out of scope for now; on the roadmap.
+- **Theme updates** — out of scope for now; on the roadmap.
+- **Multisite core updates** — out of scope; treat multisite as unsupported.
 - **Unattended operation** — the plan-approval gate is the product, not a
   limitation.
 - **Database rollbacks** — by design (see safety model).

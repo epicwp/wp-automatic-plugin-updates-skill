@@ -1,11 +1,12 @@
 ---
 name: wp-plugin-updates
-description: Safely update WordPress plugins on live sites over SSH with WP-CLI — risk assessment from changelogs before updating, before/after verification probes, and automatic file rollback when something breaks. Use when the user wants to update WordPress plugins, review pending plugin updates, connect a WordPress site for safe updates, or asks why a plugin was skipped or waitlisted.
+description: Safely update WordPress plugins and WordPress core on live sites over SSH with WP-CLI — risk assessment from changelogs and release notes before updating, before/after verification probes, and automatic file rollback when something breaks. Use when the user wants to update WordPress plugins or WordPress core, review pending updates, connect a WordPress site for safe updates, or asks why a plugin or core update was skipped or waitlisted.
 ---
 
 # WP Plugin Updates
 
-Update plugins on a live WordPress site the way a careful senior engineer would:
+Update plugins and WordPress core on a live WordPress site the way a careful
+senior engineer would:
 judge every update before touching anything, measure the site before and after,
 roll back on hard failure, and never skip anything silently.
 
@@ -41,6 +42,7 @@ sites:
     wp: wp                     # WP-CLI command; full path if not in PATH
     woocommerce: true          # detected during setup
     multilingual: [nl, en]     # languages, if a translation plugin is active
+    core_updates: true         # WordPress core as the last unit of a run (default true)
     first_run_done: false
 ```
 
@@ -52,9 +54,9 @@ machine that connects sees the same memory.
 
 These override everything else, including user convenience. Never break them.
 
-1. **Never update more than one unit at a time.** A unit is one plugin, or one
-   linked group that can only move together. Otherwise you cannot know what
-   broke the site.
+1. **Never update more than one unit at a time.** A unit is one plugin, one
+   linked group that can only move together, or WordPress core. Otherwise you
+   cannot know what broke the site.
 2. **Never leave a file in the webroot.** No `.bak`, `.tmp`, `.new`, no zips,
    no copies in `wp-content/uploads`. Everything goes to the workdir.
 3. **Never place a real order.** It fires payment, invoice numbers, and
@@ -63,7 +65,9 @@ These override everything else, including user convenience. Never break them.
 5. **Never restore the database automatically.** Restoring files is fine;
    a DB restore destroys orders that arrived in the meantime — human only.
 6. **Never update a plugin that runs a database migration.** Waitlist it,
-   even when the rest of the risk is low.
+   even when the rest of the risk is low. The single exception is WordPress
+   core's own `wp core update-db`, run explicitly inside the core unit
+   (update-run.md, phase 3) after a fresh dump. No plugin gets that exception.
 7. **Never delete an old plugin snapshot at the end of a run.** It is the only
    rollback, and premium plugins often cannot be re-downloaded. Keep ≥ 30 days.
 8. **No AI or tool references in anything a client might see.** The final
@@ -74,8 +78,10 @@ These override everything else, including user convenience. Never break them.
 
 ## Scope
 
-- Plugins only. Theme and WordPress core updates are out of scope — if asked,
-  say so and do not improvise them.
+- Plugins and WordPress core (single-site installs). Core is one unit, always
+  the last of a run, with its own factor table (risk-model.md) and its own
+  snapshot and rollback (update-run.md). Theme updates and multisite core
+  updates are out of scope — if asked, say so and do not improvise them.
 - One site per run. Multiple sites run sequentially, each as a full run.
 - SSH + WP-CLI only. No SSH → see the "no SSH" section of
   [references/troubleshooting.md](references/troubleshooting.md).

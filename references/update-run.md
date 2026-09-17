@@ -1,7 +1,8 @@
 # Update run — the procedure
 
-You are updating plugins on a **live production site**. One plugin at a time,
-with a measurement before and after, and a rollback you verifiably check.
+You are updating plugins, and WordPress core, on a **live production site**.
+One unit at a time, with a measurement before and after, and a rollback you
+verifiably check.
 Everything you do is real and visible to the site's visitors.
 
 Load the site's entry from `~/.wp-plugin-updates/sites.yaml` first. All server
@@ -60,6 +61,42 @@ system and can never know who did what. Also check WordPress itself:
 ssh <alias> "cd <wproot> && wp plugin auto-updates status --format=table 2>/dev/null"
 ```
 
+WordPress core has its own switches. Read them too:
+
+```bash
+ssh <alias> "cd <wproot> && echo WP_AUTO_UPDATE_CORE=\$(wp config get WP_AUTO_UPDATE_CORE --type=constant 2>/dev/null || echo undefined); echo auto_update_core_major=\$(wp option get auto_update_core_major 2>/dev/null || echo unset); echo auto_update_core_minor=\$(wp option get auto_update_core_minor 2>/dev/null || echo unset)"
+```
+
+- `auto_update_core_major=enabled`, or `WP_AUTO_UPDATE_CORE` set to `true`,
+  `beta` or `rc`: WordPress moves itself to feature releases with no judgment
+  gate, no snapshot and no measurement. Tell the user and **stop the core
+  unit until it is off** — switching it (`wp option update
+  auto_update_core_major disabled`) is their site policy, so only on an
+  explicit yes. Plugin units may continue meanwhile.
+- `auto_update_core_minor=enabled` (WordPress default): leave it. Minor
+  releases are the security channel and WordPress's own file rollback covers
+  them. Note it in the report: a minor can land between two runs.
+
+### 0.2b Measure the opcache window
+
+PHP-FPM keeps compiled bytecode in opcache and re-checks files only every
+`opcache.revalidate_freq` seconds. Until then, a freshly swapped plugin runs
+as a **mix** of old bytecode and new files — on a plugin that moved or renamed
+classes that is a `Class "..." not found` fatal on every page, for visitors
+too, and it happens again in reverse on a rollback. Observed: 30 seconds on
+Kinsta, two 500 windows of about a minute each on one update.
+
+```bash
+ssh <alias> "grep -rhE '^opcache\.(revalidate_freq|validate_timestamps)' /etc/php/*/fpm/ 2>/dev/null | sort -u"
+```
+
+The FPM value is the one that counts (`wp eval` reports the CLI's own, often
+lower). Settle time = that value + 10 s, default 40 s when unreadable.
+**Wait the settle time after every file swap before the HTTP probes** (P1,
+P8, P11, extras) — CLI probes are unaffected and can run meanwhile. Say in
+the report that each update carries this visitor-facing window; it is a
+host property, not something the procedure adds.
+
 ### 0.3 One DB dump as a safety net
 
 Once per run, not per plugin:
@@ -78,8 +115,10 @@ report. For a real run, always make a fresh dump.
 
 Choose the URLs you will measure — 8–12: homepage, one category page, 2–3
 products (WooCommerce), cart, checkout, my-account, one post/page, and the
-sitemap. For non-WooCommerce sites: homepage, key landing pages, one archive,
-one post, any critical forms page, and the sitemap.
+sitemap. For non-WooCommerce sites: homepage, key landing pages, one
+archive, one post, any critical forms page, and the sitemap. Always add
+`/wp-login.php` and `/wp-json/` (the REST root): both are rendered by core,
+so they move with core rather than with the theme.
 
 **Product selection is critical and goes wrong easily** (WooCommerce).
 "Best-selling" is a bad heuristic: those products are often out of stock or
@@ -170,6 +209,33 @@ Read `<workdir>/waitlist.json` and **exclude everything on it**, reporting
 per skipped plugin the date and reason. This is the memory that stops you
 hitting the same wall every run.
 
+### 1.1b The core update — same freshness rule
+
+Skip this when the site config has `core_updates: false` (say so in the
+plan). Otherwise force a fresh check — the `update_core` transient is cached
+like the plugin one:
+
+```bash
+ssh <alias> "cd <wproot> && wp transient delete update_core 2>/dev/null; wp core check-update --format=csv 2>/dev/null; wp core version --extra 2>/dev/null"
+```
+
+Empty list ⇒ no core unit this run. Otherwise the **newest** offered version
+is the target (never an intermediate one), and like a plugin target it is
+binding for the rest of the run. `update_type` reads `major` for a feature
+release (x.y) and `minor` for a maintenance or security release (x.y.z).
+Record the **package language** from `--extra`: that is the locale you pin
+in phase 3. It is not necessarily the locale of the offered package — a
+Dutch site often runs the `en_US` package plus language packs while
+`check-update` offers the `nl_NL` bundle. Pin what is installed, so the
+install does not flip between the two flavours.
+
+WordPress only offers versions the site's PHP can run. If wordpress.org has
+a newer release than `check-update` shows (compare with
+`https://api.wordpress.org/core/version-check/1.7/`), PHP is the usual
+reason: waitlist it as **blocked: PHP** — a hosting action, not a technical
+one. Core always comes from wordpress.org, so pinning is always possible:
+no channel gate.
+
 ### 1.2 Research per plugin — local first, external as backstop
 
 **Don't search the web first.** WordPress fetches changelogs itself through
@@ -232,10 +298,73 @@ the risk. Never invent changelog content, and never accept a search result
 that contradicts the official changelog: note the contradiction and trust the
 official source.
 
+### 1.2b Research the core update
+
+Core has no `plugins_api()` changelog. Use, in this order:
+
+- **Release post**, machine-readable — wordpress.org/news is itself a
+  WordPress site, so its REST API answers without HTML scraping:
+  `curl -s "https://wordpress.org/news/wp-json/wp/v2/posts?search=WordPress%20<x.y.z>&per_page=5&_fields=date,title,link,content"`.
+  Read the date (release age) and the content: a minor's post says whether
+  it is a security release; a feature release's post lists what changed.
+  The documentation page
+  `https://wordpress.org/documentation/wordpress-version/version-<x-y-z>/`
+  holds the same and more, but renders client-side — don't rely on
+  `curl | grep` there.
+- **Requirements**: `curl -s "https://api.wordpress.org/core/version-check/1.7/?version=<installed>&php=<site php>&locale=<locale>"`
+  lists every offer with `php_version` and `mysql_version` minimums and the
+  download URL. This is the same call WordPress makes for `check-update`.
+- **Security status of the installed version**:
+  `curl -s https://api.wordpress.org/core/stable-check/1.0/` lists every
+  version as `latest`, `outdated` or `insecure`. **`insecure` is a security
+  deadline**: present it to the user as such, the same way as an actively
+  exploited plugin vulnerability — their trade-off, not a sum.
+- **Field notes**: the release post on `wordpress.org/news` and
+  `https://wordpress.org/support/forum/alphabeta/` for early breakage
+  reports — the role the plugin forum plays for plugins.
+
+Then measure the plugin side of the jump — which active plugins declare
+themselves tested against the target:
+
+```bash
+ssh <alias> "cd <wproot> && wp eval-file - 2>/dev/null" <<'PHP'
+<?php
+$target  = '7.1';   // TARGET feature version x.y
+$updates = get_site_transient( 'update_plugins' );
+foreach ( (array) get_option( 'active_plugins' ) as $file ) {
+    $slug   = dirname( $file );
+    $tested = '';
+    $readme = WP_PLUGIN_DIR . "/{$slug}/readme.txt";   // describes what is INSTALLED
+    if ( file_exists( $readme ) && preg_match( '/Tested up to:\s*([0-9.]+)/i', file_get_contents( $readme ), $m ) ) {
+        $tested = $m[1];
+    }
+    if ( '' === $tested ) {
+        $tested = $updates->no_update[ $file ]->tested ?? '';   // also the installed version
+    }
+    $state = '' === $tested ? 'UNKNOWN' : ( version_compare( $tested, $target, '>=' ) ? 'ok' : 'BEHIND' );
+    printf( "%-45s tested=%-8s %s\n", $slug, $tested ?: '-', $state );
+}
+PHP
+```
+
+Read the **installed** declaration, not the update's: the transient's
+`response` entries carry the `tested` value of the *pending* version, which
+is what you'd get after the plugin unit, not what runs under core today.
+`readme.txt` and the `no_update` entries describe the installed version.
+Score against what will actually be installed when core runs: plugins that
+update earlier in this run count with their new declaration (the `response`
+value), waitlisted or license-blocked ones with the installed one.
+
+`BEHIND` by more than one feature release on a critical-path plugin is a
+counted factor (risk-model.md); one release behind is a readme's normal lag.
+`UNKNOWN` is the premium-plugin blind spot — list them, count nothing, say
+so. Also list what could replace core components: `ls wp-content/*.php
+wp-content/mu-plugins` — drop-ins score, must-use plugins are only listed.
+
 ### 1.3 Score the risk
 
-Apply [risk-model.md](risk-model.md). Every score is presented as its list of
-counted factors.
+Apply [risk-model.md](risk-model.md) — plugins with the plugin table, core
+with its own. Every score is presented as its list of counted factors.
 
 ### 1.4 Order
 
@@ -243,6 +372,9 @@ counted factors.
 - Low risk first, high risk last — a rollback is cheapest then.
 - Never step to an intermediate version known to be broken; go straight to
   the newest.
+- WordPress core is always the **last** unit: plugins that ship
+  "compatibility with X" land before X itself, and everything you measured
+  around the plugin units stays measured under the core you started with.
 
 ### 1.5 Linked plugins — the group as the unit
 
@@ -269,7 +401,8 @@ the base), then the add-on. Measure only after the last member.
 ### 1.6 The plan — the human gate
 
 Show the user the plan: order, per-plugin score with counted factors, the
-channel, and what goes to the waitlist with reasons. **Wait for explicit
+channel, the core unit (target, type, score with factors — or why there is
+none), and what goes to the waitlist with reasons. **Wait for explicit
 approval before changing anything.** This gate is never skipped, not even on
 a repeat run.
 
@@ -357,6 +490,25 @@ plugin returns every run.
 If a vendor-channel update landed on a *different* version than researched:
 you installed an unresearched version — roll back and waitlist.
 
+**Directory ≠ wp.org slug.** Some plugins were installed from a vendor zip
+under one folder name while wp.org serves them under another (the transient's
+`slug` differs from `dirname($file)`). WordPress then installs the update into
+the *slug's* folder, deletes the old one, and the plugin silently deactivates
+because `active_plugins` still points at the old path. Check before the loop:
+
+```bash
+ssh <alias> "cd <wproot> && wp eval-file - 2>/dev/null" <<'PHP'
+<?php
+foreach ( (array) ( get_site_transient( 'update_plugins' )->response ?? [] ) as $file => $d ) {
+    $dir = dirname( $file );
+    if ( ! empty( $d->slug ) && $d->slug !== $dir ) { echo "{$dir} != {$d->slug}\n"; }
+}
+PHP
+```
+
+A mismatch is a manual action (update, then activate the new path) — waitlist
+it and say so; pinning by slug would create a second copy next to the first.
+
 **3. Flush caches before measuring** — or you measure old code:
 
 ```bash
@@ -365,7 +517,9 @@ ssh <alias> "cd <wproot> && wp cache flush"
 
 If an object cache or page cache runs (host-level too), purge those as well.
 
-**4. Re-run the probe set** — exactly the frozen baseline set.
+**4. Re-run the probe set** — exactly the frozen baseline set, after the
+opcache settle time from 0.2b. A 500 measured inside that window is the
+window, not the plugin: measure again after it before you classify.
 
 **5. Classify differences**
 
@@ -382,9 +536,9 @@ ssh <alias> "rm -rf <wproot>/wp-content/plugins/<slug> && cp -a <workdir>/<RUNID
 ssh <alias> "cd <wproot> && wp plugin activate <slug>; wp cache flush"
 ```
 
-Then run the probe set **again** and compare with the original baseline. If it
-doesn't match, your rollback didn't work: **stop the entire run, call the
-human**. Waitlist the plugin with the observed diff as the reason.
+Then run the probe set **again** — after the settle time, the rollback is a
+file swap too — and compare with the original baseline. If it doesn't
+match, your rollback didn't work: **stop the entire run, call the human**. Waitlist the plugin with the observed diff as the reason.
 
 **6b. On success** — write the history line and continue.
 
@@ -400,6 +554,9 @@ After every unit, one line to `<workdir>/history.jsonl`:
  "diffs":[...],"duration_s":12}
 ```
 
+A dry run writes the same line with `"result":"dryrun"` — never `ok`, or the
+next run reads a rehearsal as a real outcome.
+
 `update_failed` is not `rolled_back`. Rolled back = the update landed but
 broke something; update_failed = it never installed. Mixing them pollutes the
 risk history: a plugin with a dead license isn't dangerous, it's unreachable.
@@ -413,6 +570,101 @@ difference, and wrongly concludes nothing shifted. Your memory then lies about
 exactly the field your risk model depends on.
 
 ---
+
+### The core unit — WordPress core, last
+
+Same loop, different steps 1, 2, 2b and 6a. Skip the unit entirely when the
+site config has `core_updates: false` or 1.1b offered nothing.
+
+**0. Fresh dump and preconditions.** The run's dump predates every plugin
+unit; core gets its own:
+
+```bash
+ssh <alias> "cd <wproot> && wp db export <workdir>/<RUNID>/db-before-core.sql --add-drop-table 2>/dev/null && gzip <workdir>/<RUNID>/db-before-core.sql && ls -lh <workdir>/<RUNID>/db-before-core.sql.gz"
+ssh <alias> "cd <wproot> && wp core check-update --format=csv 2>/dev/null; wp core verify-checksums 2>&1 | tail -20"
+```
+
+All three must hold, else waitlist as blocked and skip the unit:
+
+- the target from 1.1b is still the newest offered version (same binding
+  rule as plugins — keep this window short)
+- `verify-checksums` reports no `File doesn't verify against checksum`. A
+  modified core file is either a hack or a deliberate patch; both need a
+  human before you overwrite them — **stop and ask**. `File should not
+  exist` (leftovers such as `.orig` files) is a warning: note it, continue.
+- major auto-updates are off (0.2)
+
+**1. Snapshot the core files** — everything the update touches, nothing else:
+
+```bash
+ssh <alias> "SNAP=<workdir>/<RUNID>/wordpress-core@<old-version> && mkdir -p \$SNAP && cd <wproot> && cp -a wp-admin wp-includes \$SNAP/ && cp -a index.php wp-*.php xmlrpc.php license.txt readme.html \$SNAP/ 2>/dev/null; rm -f \$SNAP/wp-config.php; echo snapshot=\$(find \$SNAP -type f | wc -l) live=\$(find wp-admin wp-includes -type f | wc -l)"
+```
+
+`wp-content` and `wp-config.php` are never in the snapshot: the update does
+not touch them and a rollback must never overwrite them. The two counts
+should be close (the live count lacks the root files); a snapshot far
+smaller than the live tree is incomplete — stop.
+
+**2. Update — pinned, in the site's package language:**
+
+```bash
+ssh <alias> "cd <wproot> && wp core update --version=<target> --locale=<package-language> 2>&1"
+ssh <alias> "cd <wproot> && wp core update-db 2>&1; wp language core update 2>&1"
+```
+
+Save the complete output of all three in the run directory. `--version`
+pins the researched target; `--locale` keeps the localized package (without
+it WordPress downloads `en_US` over a localized install). `update-db` is
+hard rule 6's one exception: run it explicitly, here, never deferred to
+"the first admin visit" — that leaves a half-updated site that finishes
+its upgrade under a visitor instead of under you. Dry run: skip all three.
+
+**2b. Did it land?** — P9 and P10 from probes.md, plus the upgrade
+directory:
+
+```bash
+ssh <alias> "cd <wproot> && ls -A wp-content/upgrade 2>/dev/null | wc -l"
+```
+
+- P9 version ≠ target ⇒ nothing landed, or a different version did: roll
+  back (6a), waitlist with the saved output
+- P9 code `db_version` ≠ option `db_version` ⇒ `update-db` did not finish:
+  run it once more; still unequal ⇒ roll back the files, waitlist, **stop
+  the run**
+- P10 modified count > 0 ⇒ partial download or write failure: roll back
+- `wp-content/upgrade` not empty ⇒ WordPress left its unpack directory
+  behind (hard rule 2): remove its contents, note it
+
+**3–5.** Flush caches (host cache too), re-run the frozen probe set including
+P9–P11, classify with the plugin table. Expected diffs: P9's first field
+and, after a feature release, its `db_version` fields. Nothing else is
+expected.
+
+**6a. Rollback — files only, from the snapshot:**
+
+```bash
+ssh <alias> "SNAP=<workdir>/<RUNID>/wordpress-core@<old-version> && cd <wproot> && rm -rf wp-admin wp-includes && cp -a \$SNAP/wp-admin \$SNAP/wp-includes . && cp -a \$SNAP/*.php \$SNAP/*.txt \$SNAP/*.html . && wp cache flush 2>/dev/null; wp core version 2>/dev/null; wp core verify-checksums 2>&1 | tail -3"
+```
+
+Fallback when the snapshot is unusable: `wp core update --version=<old>
+--locale=<package-language> --force` — a fresh download from wordpress.org,
+which needs the network and is exactly why the snapshot exists. Then the
+full probe set against the baseline, as for plugins.
+
+**The database stays where it is** (hard rule 5). After a rollback the
+option `db_version` is higher than the old code expects. That is harmless:
+upgrade routines only run for *lower* values, and the number is simply
+reset by the next `wp core update-db` or admin load. Schema additions from
+the newer version stay in place, unused. Say so in the report, so nobody
+"repairs" it with a database restore.
+
+**6b. On success** — history line with `"slug":"wordpress-core"`, then:
+
+**7. Re-inventory the plugins.** A core update unlocks plugin updates that
+were hidden behind a `Requires at least` — WordPress does not even list
+them before. Re-run 1.1 and report what appeared. Those targets are
+**unresearched**: a second pass through phase 1 with its own plan gate, or
+the next run. Never fold them into this loop.
 
 ## Phase 4 — Close out
 
@@ -435,7 +687,10 @@ exactly the field your risk model depends on.
 - Two units rolled back in a row
 - A fatal that persists after a rollback
 - Less than 2 GB of disk space
-- WooCommerce itself, or anything else running a DB migration
+- WooCommerce itself, or anything else running a DB migration (core's own
+  `update-db` inside the core unit excepted)
+- Modified core files at `verify-checksums` before the core unit
+- A core `update-db` that does not complete on the second attempt
 - `<workdir>/<RUNID>/` already exists
 - The site is unreachable and you don't know why
 - You would need to do something not written in this procedure
@@ -458,6 +713,10 @@ tool references):
 - What was rolled back and what was observed
 - What a human should check — always include invoicing and transactional
   email for critical-path updates (the un-probeable blind spot)
+- For a core unit: the version jump, `db_version` before and after, and the
+  checks only a logged-in human can do — open the block editor on a page and
+  a product, the media library, and on shops the orders screen and WooCommerce
+  settings. Admin screens cannot be probed without a session.
 - For dry runs: state clearly that nothing was changed
 
 If during the run you missed a probe or a risk factor that the model should
