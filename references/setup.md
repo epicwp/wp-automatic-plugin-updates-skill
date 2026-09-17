@@ -90,7 +90,15 @@ site config and use that everywhere. Re-test with the stored command.
 
 ## 5. Find the PHP error log
 
-Try, in order: the host's documented location (troubleshooting.md), then:
+First ask WordPress where PHP errors go:
+
+```bash
+ssh <alias> 'cd <wproot> && wp config get WP_DEBUG_LOG 2>/dev/null; ls -la wp-content/debug.log 2>/dev/null'
+```
+
+`WP_DEBUG_LOG` true (or a path) ⇒ that file is `logpath`; the host's error
+log then only carries nginx-level lines and would leave P2 blind. Otherwise
+try, in order: the host's documented location (troubleshooting.md), then:
 
 ```bash
 ssh <alias> 'for f in ~/logs/error.log ~/logs/*error*.log <wproot>/wp-content/debug.log; do [ -f "$f" ] && echo "$f"; done 2>/dev/null'
@@ -122,8 +130,11 @@ ssh <alias> 'cd <wproot> && wp core version && wp plugin list --format=count 2>/
 ssh <alias> 'cd <wproot> && wp plugin list --status=active --field=name 2>/dev/null | grep -iE "woocommerce|polylang|wpml|translatepress|weglot"'
 ```
 
-Record: WordPress version, plugin count, free disk space, whether WooCommerce
-is active, which translation plugin (if any) with its languages
+Record: WordPress version and package language (`wp core version --extra`),
+whether a core update is offered (`wp core check-update`), the core
+auto-update setting (`wp option get auto_update_core_major`), plugin count,
+free disk space, whether WooCommerce is active, which translation plugin
+(if any) with its languages
 (`wp pll languages` / `wp option get WPML` vary — just note the plugin and ask
 the user which languages the site serves). Flag now, not during a run:
 
@@ -134,7 +145,8 @@ the user which languages the site serves). Flag now, not during a run:
 ## 8. Save and confirm
 
 Create `~/.wp-plugin-updates/` if needed and write the entry per the format in
-SKILL.md (`first_run_done: false`, `maxrisk: 6` default). Show the user what
+SKILL.md (`first_run_done: false`, `maxrisk: 6` and `core_updates: true` by
+default). Show the user what
 was saved, then offer the next step:
 
 > "Site connected. Want me to do a **dry run** now? It walks the entire update

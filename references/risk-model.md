@@ -90,3 +90,38 @@ Vendors understate. A real example: Forminator 1.55.1's changelog said no more
 than "Fix: Security improvements" — it was an unauthenticated path traversal,
 CVSS 7.5. Vague security wording on a critical-path plugin is a reason to
 research externally (Patchstack, WPScan), not a reason to relax.
+
+## WordPress core — its own table
+
+Core is scored the same way — from facts — but the facts differ: there is no
+changelog to clip, "tested up to" runs the other way (plugins declare
+themselves against core), and the database upgrade is expected rather than
+disqualifying. `maxrisk` applies unchanged.
+
+| Factor | Points |
+|---|---|
+| Feature release (x.y changes; `update_type=major`) | +3 |
+| More than one feature release skipped (6.8 → 7.1 skips 6.9 and 7.0) | +2 |
+| An active **critical-path** plugin declares `Tested up to` **more than one feature release** below the target (target 7.1: declares 6.9 or lower; 7.0 is the normal one-release lag of a readme) (update-run.md 1.2b) | +2 (once; list them) |
+| An own **drop-in** (`object-cache.php`, `db.php`, `advanced-cache.php`, `db-error.php`) — not the host's, not an installed plugin's; the file header says. Drop-ins replace core components; `mu-plugins` only use core's API like any plugin, so list them, count nothing | +2 |
+| Core appears in `history.jsonl` as previously failed | +4 |
+| Target released less than 7 days ago | +2 |
+| Target 7–30 days old | +1 |
+| Minor release whose release notes call it a security release | −2 |
+
+Not scored — these **block** or **stop**, whatever the sum:
+
+- no target offered that the site's PHP can run ⇒ waitlist, blocked: PHP (hosting action)
+- `wp core verify-checksums` reports modified files ⇒ stop and ask
+- `auto_update_core_major` enabled ⇒ the core unit waits until it is off
+- installed version `insecure` per `api.wordpress.org/core/stable-check` ⇒ a security deadline: present it, don't sum it
+
+The database upgrade (`wp core update-db`) is **not** the +4 migration
+factor: it is core's normal path, idempotent, and the one migration hard
+rule 6 permits. Its cost is a blind spot instead — nothing on the front end
+shows a half-finished upgrade — which is why update-run.md verifies
+`db_version` explicitly after the unit.
+
+Typical: 6.9.7 → 7.1, two months after release, on a shop whose
+translation plugin still declares 6.9 = +3 +2 = 5, allowed. The same jump in
+the week 7.1 ships = 7, waitlist until it has aged.
