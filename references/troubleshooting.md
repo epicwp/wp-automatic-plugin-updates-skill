@@ -111,6 +111,11 @@ mandatory `<?php` opening tag (eval-file does an include).
   has to confirm the installed version equals X.
 - A plugin that silently deactivates on update — directory name differs from
   the wp.org slug (update-run.md, step 2b). Manual update plus re-activation.
+- `wp core update` prints HTML (`<p>`, `<div class="update-messages">`, a
+  `<script>` block) — that is the language-pack updater WordPress runs
+  inside the core upgrade, also for plugins. Harmless; the lines that count
+  are `Success: WordPress updated successfully.` and, from `update-db`,
+  `database upgraded successfully from db version X to Y`.
 
 ## Workdir problems
 

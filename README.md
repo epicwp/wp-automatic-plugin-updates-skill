@@ -48,10 +48,12 @@ rolled back and the measurements re-verified. Whatever can't be updated
 safely is *waitlisted with its reasons* — never silently skipped.
 
 The procedure behind this skill has run on live production WooCommerce shops:
-one run of sixteen plugins and one of four — zero rollbacks, zero new errors,
-and it caught things a human wouldn't have: four target versions shifted
-*during* the run window, and one "up to date" success message that actually
-meant "your license expired, nothing was installed."
+runs of sixteen, fifteen, four and two units (the last one including a
+WordPress 6.9 → 7.1 core update) — and it caught things a human wouldn't
+have: four target versions shifted *during* the run window, one "up to date"
+success message that actually meant "your license expired, nothing was
+installed", and one update whose 500s were the host's opcache window rather
+than the plugin.
 
 Tools that update your plugins save you clicks. This saves you the thinking.
 
