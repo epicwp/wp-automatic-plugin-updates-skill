@@ -117,6 +117,16 @@ mandatory `<?php` opening tag (eval-file does an include).
   are `Success: WordPress updated successfully.` and, from `update-db`,
   `database upgraded successfully from db version X to Y`.
 
+- **P2 line count dropped below the baseline** — the host rotated the log
+  overnight. The baseline signatures are gone with it; take a fresh
+  reference measurement before the next unit instead of diffing against a
+  file that no longer exists in that form.
+- **A run that spans a night** — re-read the update list before continuing:
+  targets shift (a plugin released a new version overnight) and WordPress
+  may have moved itself to a minor release through its own channel. Both
+  are unresearched from the plan's point of view: re-assess the shifted
+  unit, and treat the new core version as the target.
+
 ## Workdir problems
 
 - Cannot create a directory outside the webroot — see setup.md §6: without
