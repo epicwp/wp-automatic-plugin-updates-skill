@@ -3,7 +3,7 @@ $installed = getenv('INSTALLED'); $target = getenv('TARGET');
 function keys( $f ) {
     $s = file_get_contents( $f );
     if ( ! preg_match( '/\$db_updates\s*=\s*(?:array\(|\[)(.*?)^\s*(?:\)|\]);/ms', $s, $m ) ) { return null; }
-    preg_match_all( "/^\s*'([0-9.]+)'\s*=>/m", $m[1], $k );
+    preg_match_all( "/^\s*'([0-9.]+(?:-[0-9]+)?)'\s*=>/m", $m[1], $k );   // keys like 11.1.0-1 exist
     return $k[1];
 }
 $a = keys( 'install-installed.php' ); $b = keys( "install-{$target}.php" );

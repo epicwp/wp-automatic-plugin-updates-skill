@@ -588,23 +588,14 @@ changelog line alone:
    workdir and compare that array with the installed file:
 
 ```bash
-ssh <alias> "D=<workdir>/wc-gate && mkdir -p \$D && cd \$D && curl -sL -o wc.zip https://downloads.wordpress.org/plugin/woocommerce.<target>.zip && unzip -p wc.zip woocommerce/includes/class-wc-install.php > install-<target>.php && cp <wproot>/wp-content/plugins/woocommerce/includes/class-wc-install.php install-installed.php && rm -f wc.zip"
-ssh <alias> "cd <workdir>/wc-gate && INSTALLED=<installed> TARGET=<target> php" <<'PHP'
-<?php
-$installed = getenv( 'INSTALLED' ); $target = getenv( 'TARGET' );
-function keys( $f ) {
-    $s = file_get_contents( $f );
-    if ( ! preg_match( '/\$db_updates\s*=\s*(?:array\(|\[)(.*?)^\s*(?:\)|\]);/ms', $s, $m ) ) { return null; }
-    preg_match_all( "/^\s*'([0-9.]+)'\s*=>/m", $m[1], $k );
-    return $k[1];
-}
-$b = keys( "install-{$target}.php" );
-if ( null === $b ) { echo "GATE_ERROR: db_updates array not found\n"; exit( 2 ); }
-$applies = array_values( array_filter( $b, fn( $v ) => version_compare( $v, $installed, '>' ) && version_compare( $v, $target, '<=' ) ) );
-echo 'DB_UPDATES=' . ( $applies ? implode( ',', $applies ) : 'NONE' ) . "\n";
-exit( $applies ? 1 : 0 );
-PHP
+ssh <alias> "D=<workdir>/wc-gate && mkdir -p \$D && cd \$D && curl -sL -o wc.zip https://downloads.wordpress.org/plugin/woocommerce.<target>.zip && unzip -p wc.zip woocommerce/includes/class-wc-install.php > install-<target>.php && cp <wproot>/wp-content/plugins/woocommerce/includes/class-wc-install.php install-installed.php"
+ssh <alias> "cd <workdir>/wc-gate && INSTALLED=<installed> TARGET=<target> php" < scripts/wc-db-updates-keys.php
 ```
+
+   The script (shipped with this skill) reads both `$db_updates` arrays and
+   prints the keys between installed and target, with their routine names.
+   Keys can carry a suffix (`11.1.0-1`); the script accepts them — an
+   earlier version did not and let one routine through unread.
 
    Exit 0 (no keys between installed and target) ⇒ continue. Exit 1 ⇒ the
    package carries routines for this jump. That is not yet a verdict: read
@@ -642,9 +633,12 @@ when 2b allowed routines, an explicit `wp wc update` right after the file
 update — the same principle as core's `update-db`: the upgrade runs under
 you, not under the next visitor. After that, besides the plugin checks:
 
-- P17 `woocommerce_db_version` must equal `WC()->version`. If it lags after
-  `wp wc update`, a routine did not finish: roll back the files and waitlist
-  with the `wp wc update` output.
+- P17: `WC_Install::needs_db_update()` must be `no` and `woocommerce_db_version`
+  must equal the **last key** of `WC_Install::get_db_update_callbacks()` — not
+  `WC()->version`, because the last key can be a suffixed one like
+  `11.1.0-1`. If it still needs an update after `wp wc update`, a routine did
+  not finish: roll back the files and waitlist with the `wp wc update`
+  output.
 - P5–P7 and P11 identical: prices, gateways, zones and the REST surface the
   integrations use.
 

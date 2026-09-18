@@ -282,12 +282,16 @@ break on.
 ```bash
 ssh <alias> "cd <wproot> && wp eval-file - 2>/dev/null" <<'PHP'
 <?php
-echo WC()->version . '|' . get_option( 'woocommerce_db_version' ) . "\n";
+$cb = WC_Install::get_db_update_callbacks();
+echo WC()->version . '|' . get_option( 'woocommerce_db_version' ) . '|' . ( $cb ? array_key_last( $cb ) : '-' ) . '|' . ( WC_Install::needs_db_update() ? 'needs_update' : 'up_to_date' ) . "\n";
 PHP
 ```
 
-Plugin version and the database version WooCommerce believes it is at.
-Baseline: equal. After the unit (and after the explicit `wp wc update` the
-unit runs when the gate allowed routines): both equal to the target. A
-lagging second field means a routine did not finish — file rollback,
-waitlist with the output.
+Plugin version, the database version WooCommerce believes it is at, the last
+key of its update list, and WooCommerce's own verdict. Baseline:
+`up_to_date`. After the unit (and after the explicit `wp wc update` the unit
+runs when the gate allowed routines): second field equals the third, and
+`up_to_date`. The last key may carry a suffix (`11.1.0-1`), so never compare
+the database version with the plugin version. `needs_update` after
+`wp wc update` means a routine did not finish — file rollback, waitlist with
+the output.
