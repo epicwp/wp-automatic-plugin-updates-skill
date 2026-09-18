@@ -68,9 +68,11 @@ These override everything else, including user convenience. Never break them.
    even when the rest of the risk is low. Two exceptions, both verified
    from code rather than from a changelog: WordPress core's own
    `wp core update-db` inside the core unit, and a WooCommerce release
-   within the same major whose `$db_updates` list holds **nothing** between
-   the installed and the target version (update-run.md, WooCommerce unit).
-   A WooCommerce major, or any release that does carry a database update,
+   within the same major whose `$db_updates` routines for the jump are
+   either absent or proven housekeeping by the shipped scanner — transients,
+   caches, options and WooCommerce's own email-template posts, nothing that
+   touches schema or business data (update-run.md, WooCommerce unit). A
+   WooCommerce major, or any routine the scanner blocks or cannot read,
    stays a human's job.
 7. **Never delete an old plugin snapshot at the end of a run.** It is the only
    rollback, and premium plugins often cannot be re-downloaded. Keep ≥ 30 days.
@@ -86,8 +88,9 @@ These override everything else, including user convenience. Never break them.
   unit, always the last of a run, with its own factor table (risk-model.md)
   and its own snapshot and rollback (update-run.md). WooCommerce is the last
   *plugin* unit, only within the same major and only when the package's own
-  database-update list is empty for the jump. Theme updates and multisite
-  core updates are out of scope — if asked, say so and do not improvise them.
+  database-update routines for the jump are absent or proven housekeeping.
+  Theme updates and multisite core updates are out of scope — if asked, say
+  so and do not improvise them.
 - One site per run. Multiple sites run sequentially, each as a full run.
 - SSH + WP-CLI only. No SSH → see the "no SSH" section of
   [references/troubleshooting.md](references/troubleshooting.md).

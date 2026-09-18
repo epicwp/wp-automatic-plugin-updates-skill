@@ -79,9 +79,13 @@ Tools that update your plugins save you clicks. This saves you the thinking.
    from wordpress.org in the site's language, explicit database upgrade,
    re-measure, file rollback on hard failure. WooCommerce joins the loop as
    the last plugin unit only within the same major and only when the
-   package's own database-update list is empty for the jump — a fact read
-   from the downloaded code, not from the changelog. Anything else on
-   WooCommerce stays a human's job, and the skill says so with the reason.
+   package's own database-update routines for the jump are absent or proven
+   housekeeping by a scanner that reads their bodies — transients, caches,
+   options and WooCommerce's own email-template posts pass; anything that
+   touches schema, orders, products or schedules background work does not.
+   A fact read from the downloaded code, not from the changelog. Anything
+   else on WooCommerce stays a human's job, and the skill says so with the
+   reason.
 6. **Report** — what changed, what was skipped and why, what a human should
    still check. Written in neutral professional language you can forward to
    a client as-is.
@@ -161,7 +165,8 @@ The skill operates under hard rules the agent may never break, including:
 - Plugins that run **database migrations are never auto-updated** — waitlisted.
   The only migration the skill ever runs is WordPress core's own database
   upgrade, inside the core unit, after a fresh dump. WooCommerce is updated
-  only when its own `$db_updates` list proves the jump carries none.
+  only when its own `$db_updates` routines for the jump are absent or
+  proven housekeeping from their code.
 - Snapshots are kept **at least 30 days** — premium plugins often can't be
   re-downloaded.
 - **When in doubt, it stops and asks.** A skipped plugin costs nothing;
@@ -175,9 +180,10 @@ agent's model provider, under your existing agreement with them.
 ## What it deliberately does not do
 
 - **Theme updates** — out of scope for now; on the roadmap.
-- **WooCommerce majors, or any WooCommerce release with a database update** —
-  deliberately manual. The skill tells you which upgrade routines the
-  package carries so you can plan the window.
+- **WooCommerce majors, or any WooCommerce database routine that touches
+  schema or business data** — deliberately manual. The skill tells you which
+  upgrade routines the package carries and why they were blocked, so you
+  can plan the window.
 - **Multisite core updates** — out of scope; treat multisite as unsupported.
 - **Unattended operation** — the plan-approval gate is the product, not a
   limitation.

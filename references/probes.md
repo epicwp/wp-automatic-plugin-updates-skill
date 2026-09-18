@@ -287,6 +287,7 @@ PHP
 ```
 
 Plugin version and the database version WooCommerce believes it is at.
-Baseline: equal. After the unit: both equal to the target. A lagging second
-field means a queued database update — the unit's gate was wrong, and the
-answer is a file rollback, never `wp wc update`.
+Baseline: equal. After the unit (and after the explicit `wp wc update` the
+unit runs when the gate allowed routines): both equal to the target. A
+lagging second field means a routine did not finish — file rollback,
+waitlist with the output.

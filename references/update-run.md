@@ -606,23 +606,45 @@ exit( $applies ? 1 : 0 );
 PHP
 ```
 
-   Exit 1 (one or more keys between installed and target) ⇒ a database
-   update ⇒ **not this procedure**: waitlist as human work, quoting the
-   keys. Exit 0 ⇒ continue. The release post on developer.woocommerce.com
-   states "Database update: Yes/No" too; when the two disagree, the code
-   wins — it is what will run.
+   Exit 0 (no keys between installed and target) ⇒ continue. Exit 1 ⇒ the
+   package carries routines for this jump. That is not yet a verdict: read
+   what they do.
+2b. **The routines are housekeeping, proven from their bodies.** Unpack the
+   package in the workdir and run the scanner shipped with this skill
+   (`scripts/wc-db-routines-scan.php`) over the routine names the key check
+   printed:
+
+```bash
+ssh <alias> "cd <workdir>/wc-gate && mkdir -p pkg && unzip -q wc.zip -d pkg"
+ssh <alias> "cd <workdir>/wc-gate && PKG=pkg/woocommerce ROUTINES=<name1>,<name2> php" < scripts/wc-db-routines-scan.php
+```
+
+   The scanner reads each routine's body from `includes/wc-update-functions.php`,
+   follows one level of delegation into the package's own classes
+   (`Class::method()`, `new Class()`), and blocks on anything that touches
+   schema or business data: `dbDelta`, `CREATE|ALTER|DROP|RENAME|TRUNCATE
+   TABLE`, raw `INSERT|UPDATE|DELETE`, `$wpdb->insert|update|replace|query|
+   delete`, order or product stores, background scheduling, and post writes
+   that are not guarded by WooCommerce's own email-template post type. What
+   remains — transients, caches, options, and WooCommerce's generated
+   email-template posts — is housekeeping a file rollback can live with.
+   `VERDICT=ALLOW` ⇒ continue; `BLOCK` ⇒ waitlist as human work, quoting
+   the scanner's line. A routine the scanner cannot read (delegation it
+   cannot resolve) blocks too. The release post's "Database update:
+   Yes/No" is context; the code is the authority.
 3. **WordPress already meets `Requires at least`.** WordPress hides the
    update otherwise, so an offered update satisfies this.
 
 With all three, WooCommerce is a plugin unit like any other — the **last
-plugin unit, before core** — with two additions: a fresh dump right before
-it (the run's dump predates the other units), and P17 in the probe set.
-After the update, besides the plugin checks:
+plugin unit, before core** — with three additions: a fresh dump right before
+it (the run's dump predates the other units), P17 in the probe set, and,
+when 2b allowed routines, an explicit `wp wc update` right after the file
+update — the same principle as core's `update-db`: the upgrade runs under
+you, not under the next visitor. After that, besides the plugin checks:
 
-- P17 `woocommerce_db_version` must equal `WC()->version`. If it lags,
-  WooCommerce queued a database update your gate said did not exist: roll
-  back the files, waitlist, and re-read the gate — do **not** run
-  `wp wc update` to "finish" it.
+- P17 `woocommerce_db_version` must equal `WC()->version`. If it lags after
+  `wp wc update`, a routine did not finish: roll back the files and waitlist
+  with the `wp wc update` output.
 - P5–P7 and P11 identical: prices, gateways, zones and the REST surface the
   integrations use.
 

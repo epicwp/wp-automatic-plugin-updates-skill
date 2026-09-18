@@ -128,9 +128,11 @@ mandatory `<?php` opening tag (eval-file does an include).
   unit, and treat the new core version as the target.
 
 - WooCommerce's release post says "Database update: Yes" for a version
-  that looks like a minor — believe it. 11.1.0 carried one while 11.0.1 did
-  not; the version number tells you nothing about the database. The gate in
-  update-run.md reads the package instead.
+  that looks like a minor — believe it, then read what it is. 11.1.0 carried
+  three routines (a transient, a cache, a cleanup of never-customised
+  email-template posts) that the scanner allowed; the version number tells
+  you nothing about the database. The gate in update-run.md reads the
+  package.
 
 ## Workdir problems
 
