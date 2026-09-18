@@ -375,6 +375,8 @@ with its own. Every score is presented as its list of counted factors.
 - WordPress core is always the **last** unit: plugins that ship
   "compatibility with X" land before X itself, and everything you measured
   around the plugin units stays measured under the core you started with.
+- WooCommerce, when its gate passes, is the last *plugin* unit, right before
+  core: the extensions that declare compatibility with it go first.
 
 ### 1.5 Linked plugins — the group as the unit
 
@@ -571,6 +573,63 @@ exactly the field your risk model depends on.
 
 ---
 
+### The WooCommerce unit — same major, no database update, gated by the code
+
+WooCommerce touches everything a shop earns with, and its releases often
+carry database upgrades that a file rollback cannot undo. It enters the loop
+only when three facts hold — read from the code and the site, never from a
+changelog line alone:
+
+1. **Same major.** First digit unchanged: `11.0.1 → 11.1.0` qualifies,
+   `10.8.1 → 11.1.0` does not. A major is a human's job in a quiet window.
+2. **No database update between installed and target.** WooCommerce
+   declares its upgrade routines in `includes/class-wc-install.php`, in the
+   `$db_updates` array, keyed by version. Download the target package to the
+   workdir and compare that array with the installed file:
+
+```bash
+ssh <alias> "D=<workdir>/wc-gate && mkdir -p \$D && cd \$D && curl -sL -o wc.zip https://downloads.wordpress.org/plugin/woocommerce.<target>.zip && unzip -p wc.zip woocommerce/includes/class-wc-install.php > install-<target>.php && cp <wproot>/wp-content/plugins/woocommerce/includes/class-wc-install.php install-installed.php && rm -f wc.zip"
+ssh <alias> "cd <workdir>/wc-gate && INSTALLED=<installed> TARGET=<target> php" <<'PHP'
+<?php
+$installed = getenv( 'INSTALLED' ); $target = getenv( 'TARGET' );
+function keys( $f ) {
+    $s = file_get_contents( $f );
+    if ( ! preg_match( '/\$db_updates\s*=\s*(?:array\(|\[)(.*?)^\s*(?:\)|\]);/ms', $s, $m ) ) { return null; }
+    preg_match_all( "/^\s*'([0-9.]+)'\s*=>/m", $m[1], $k );
+    return $k[1];
+}
+$b = keys( "install-{$target}.php" );
+if ( null === $b ) { echo "GATE_ERROR: db_updates array not found\n"; exit( 2 ); }
+$applies = array_values( array_filter( $b, fn( $v ) => version_compare( $v, $installed, '>' ) && version_compare( $v, $target, '<=' ) ) );
+echo 'DB_UPDATES=' . ( $applies ? implode( ',', $applies ) : 'NONE' ) . "\n";
+exit( $applies ? 1 : 0 );
+PHP
+```
+
+   Exit 1 (one or more keys between installed and target) ⇒ a database
+   update ⇒ **not this procedure**: waitlist as human work, quoting the
+   keys. Exit 0 ⇒ continue. The release post on developer.woocommerce.com
+   states "Database update: Yes/No" too; when the two disagree, the code
+   wins — it is what will run.
+3. **WordPress already meets `Requires at least`.** WordPress hides the
+   update otherwise, so an offered update satisfies this.
+
+With all three, WooCommerce is a plugin unit like any other — the **last
+plugin unit, before core** — with two additions: a fresh dump right before
+it (the run's dump predates the other units), and P17 in the probe set.
+After the update, besides the plugin checks:
+
+- P17 `woocommerce_db_version` must equal `WC()->version`. If it lags,
+  WooCommerce queued a database update your gate said did not exist: roll
+  back the files, waitlist, and re-read the gate — do **not** run
+  `wp wc update` to "finish" it.
+- P5–P7 and P11 identical: prices, gateways, zones and the REST surface the
+  integrations use.
+
+Score with the plugin table: +3 critical path always (WooCommerce is the
+critical path), plus age and the rest. A minor within the gate typically
+lands at 4.
+
 ### The core unit — WordPress core, last
 
 Same loop, different steps 1, 2, 2b and 6a. Skip the unit entirely when the
@@ -687,8 +746,9 @@ the next run. Never fold them into this loop.
 - Two units rolled back in a row
 - A fatal that persists after a rollback
 - Less than 2 GB of disk space
-- WooCommerce itself, or anything else running a DB migration (core's own
-  `update-db` inside the core unit excepted)
+- WooCommerce across a major, or with anything in its `$db_updates` list for
+  the jump; anything else running a DB migration (core's own `update-db`
+  inside the core unit excepted)
 - Modified core files at `verify-checksums` before the core unit
 - A core `update-db` that does not complete on the second attempt
 - `<workdir>/<RUNID>/` already exists

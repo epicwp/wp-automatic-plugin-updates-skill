@@ -274,3 +274,19 @@ WordPress. A namespace that disappears is a plugin whose REST routes no
 longer register: the integration-side counterpart of a deactivated plugin,
 invisible to P1–P8 and exactly what order-fulfilment and feed integrations
 break on.
+
+## WooCommerce extra — when the run has a WooCommerce unit
+
+### P17 `wc_versions`
+
+```bash
+ssh <alias> "cd <wproot> && wp eval-file - 2>/dev/null" <<'PHP'
+<?php
+echo WC()->version . '|' . get_option( 'woocommerce_db_version' ) . "\n";
+PHP
+```
+
+Plugin version and the database version WooCommerce believes it is at.
+Baseline: equal. After the unit: both equal to the target. A lagging second
+field means a queued database update — the unit's gate was wrong, and the
+answer is a file rollback, never `wp wc update`.

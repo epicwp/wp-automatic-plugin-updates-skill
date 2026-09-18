@@ -1,7 +1,7 @@
 # WP Plugin Updates — an agent skill
 
-Safely update WordPress plugins and WordPress core from the AI coding agent
-you already use —
+Safely update WordPress plugins, WordPress core and WooCommerce from the AI
+coding agent you already use —
 Claude Code, Cowork, Cursor, Codex, or anything that supports agent skills.
 
 No SaaS. No plugin to install on your site. No account. Just a skill that
@@ -48,12 +48,12 @@ rolled back and the measurements re-verified. Whatever can't be updated
 safely is *waitlisted with its reasons* — never silently skipped.
 
 The procedure behind this skill has run on live production WooCommerce shops:
-runs of sixteen, fifteen, four and two units (the last one including a
-WordPress 6.9 → 7.1 core update) — and it caught things a human wouldn't
-have: four target versions shifted *during* the run window, one "up to date"
+seven shops in two days, 80 units including five WordPress core updates
+(6.9 → 7.1 and 7.0 → 7.1.1) — and it caught things a human wouldn't have: four target versions shifted *during* the run window, one "up to date"
 success message that actually meant "your license expired, nothing was
-installed", and one update whose 500s were the host's opcache window rather
-than the plugin.
+installed", one update whose 500s were the host's opcache window rather than
+the plugin, and a WooCommerce "minor" whose package carried three database
+routines the version number never hinted at.
 
 Tools that update your plugins save you clicks. This saves you the thinking.
 
@@ -77,7 +77,11 @@ Tools that update your plugins save you clicks. This saves you the thinking.
    WordPress core, when a release is offered, is the last unit of the run
    under the same discipline: snapshot of the core files, pinned download
    from wordpress.org in the site's language, explicit database upgrade,
-   re-measure, file rollback on hard failure.
+   re-measure, file rollback on hard failure. WooCommerce joins the loop as
+   the last plugin unit only within the same major and only when the
+   package's own database-update list is empty for the jump — a fact read
+   from the downloaded code, not from the changelog. Anything else on
+   WooCommerce stays a human's job, and the skill says so with the reason.
 6. **Report** — what changed, what was skipped and why, what a human should
    still check. Written in neutral professional language you can forward to
    a client as-is.
@@ -156,7 +160,8 @@ The skill operates under hard rules the agent may never break, including:
   destroys orders that arrived in the meantime and always requires a human.
 - Plugins that run **database migrations are never auto-updated** — waitlisted.
   The only migration the skill ever runs is WordPress core's own database
-  upgrade, inside the core unit, after a fresh dump.
+  upgrade, inside the core unit, after a fresh dump. WooCommerce is updated
+  only when its own `$db_updates` list proves the jump carries none.
 - Snapshots are kept **at least 30 days** — premium plugins often can't be
   re-downloaded.
 - **When in doubt, it stops and asks.** A skipped plugin costs nothing;
@@ -170,6 +175,9 @@ agent's model provider, under your existing agreement with them.
 ## What it deliberately does not do
 
 - **Theme updates** — out of scope for now; on the roadmap.
+- **WooCommerce majors, or any WooCommerce release with a database update** —
+  deliberately manual. The skill tells you which upgrade routines the
+  package carries so you can plan the window.
 - **Multisite core updates** — out of scope; treat multisite as unsupported.
 - **Unattended operation** — the plan-approval gate is the product, not a
   limitation.

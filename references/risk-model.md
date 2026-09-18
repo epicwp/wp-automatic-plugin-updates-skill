@@ -22,7 +22,7 @@ breakdown. That breakdown is what makes a decision explainable to a client.
 | Changelog is solely "compatibility with X" or translations | −2 |
 
 **Score > maxrisk (default 6), or any database migration, or WooCommerce
-itself ⇒ do not update.** Write to the server-side `waitlist.json`: slug,
+outside the conditions of its unit (update-run.md) ⇒ do not update.** Write to the server-side `waitlist.json`: slug,
 current version, target version, score, the factors that counted, date, and
 what a human should check.
 

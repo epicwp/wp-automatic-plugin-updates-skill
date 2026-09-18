@@ -1,6 +1,6 @@
 ---
 name: wp-plugin-updates
-description: Safely update WordPress plugins and WordPress core on live sites over SSH with WP-CLI — risk assessment from changelogs and release notes before updating, before/after verification probes, and automatic file rollback when something breaks. Use when the user wants to update WordPress plugins or WordPress core, review pending updates, connect a WordPress site for safe updates, or asks why a plugin or core update was skipped or waitlisted.
+description: Safely update WordPress plugins, WordPress core and WooCommerce on live sites over SSH with WP-CLI — risk assessment from changelogs and release notes before updating, before/after verification probes, and automatic file rollback when something breaks. Use when the user wants to update WordPress plugins, WordPress core or WooCommerce, review pending updates, connect a WordPress site for safe updates, or asks why a plugin, core or WooCommerce update was skipped or waitlisted.
 ---
 
 # WP Plugin Updates
@@ -65,9 +65,13 @@ These override everything else, including user convenience. Never break them.
 5. **Never restore the database automatically.** Restoring files is fine;
    a DB restore destroys orders that arrived in the meantime — human only.
 6. **Never update a plugin that runs a database migration.** Waitlist it,
-   even when the rest of the risk is low. The single exception is WordPress
-   core's own `wp core update-db`, run explicitly inside the core unit
-   (update-run.md, phase 3) after a fresh dump. No plugin gets that exception.
+   even when the rest of the risk is low. Two exceptions, both verified
+   from code rather than from a changelog: WordPress core's own
+   `wp core update-db` inside the core unit, and a WooCommerce release
+   within the same major whose `$db_updates` list holds **nothing** between
+   the installed and the target version (update-run.md, WooCommerce unit).
+   A WooCommerce major, or any release that does carry a database update,
+   stays a human's job.
 7. **Never delete an old plugin snapshot at the end of a run.** It is the only
    rollback, and premium plugins often cannot be re-downloaded. Keep ≥ 30 days.
 8. **No AI or tool references in anything a client might see.** The final
@@ -78,10 +82,12 @@ These override everything else, including user convenience. Never break them.
 
 ## Scope
 
-- Plugins and WordPress core (single-site installs). Core is one unit, always
-  the last of a run, with its own factor table (risk-model.md) and its own
-  snapshot and rollback (update-run.md). Theme updates and multisite core
-  updates are out of scope — if asked, say so and do not improvise them.
+- Plugins, WordPress core (single-site installs) and WooCommerce. Core is one
+  unit, always the last of a run, with its own factor table (risk-model.md)
+  and its own snapshot and rollback (update-run.md). WooCommerce is the last
+  *plugin* unit, only within the same major and only when the package's own
+  database-update list is empty for the jump. Theme updates and multisite
+  core updates are out of scope — if asked, say so and do not improvise them.
 - One site per run. Multiple sites run sequentially, each as a full run.
 - SSH + WP-CLI only. No SSH → see the "no SSH" section of
   [references/troubleshooting.md](references/troubleshooting.md).
